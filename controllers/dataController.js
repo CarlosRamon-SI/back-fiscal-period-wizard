@@ -2,7 +2,7 @@ const jsonModel = require('../models/jsonModel');
 const { msg, state } = require('../utils/messages');
 const { service } = require('../services/jsonService');
 
-exports.insertJson = async (req, res) => {
+exports.insertData = async (req, res) => {
     const { mes, ano } = req.body;
     
     try {
@@ -37,7 +37,7 @@ exports.insertJson = async (req, res) => {
     }
 };
 
-exports.updateJson = async (req, res) => {
+exports.updateData = async (req, res) => {
     const {id, data} = req.body;
     try {
         const result = await jsonModel.updateJson(id, JSON.stringify(data));
@@ -63,7 +63,7 @@ exports.updateJson = async (req, res) => {
     }
 };
 
-exports.getJson = async (req, res) => {
+exports.getData = async (req, res) => {
     try {
         const result = await jsonModel.getJson(req.params.id);
         
