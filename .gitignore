@@ -1,0 +1,6 @@
+.env
+/node_modules
+/misc
+/database/*
+!/database/.gitkeep
+/logs
