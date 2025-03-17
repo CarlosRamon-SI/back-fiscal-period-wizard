@@ -5,7 +5,7 @@ const registraConta = new LancamentoContaPagarJsonClient();
 
 router.use(express.json());
 
-router.post('/omie', async (req, res) => {
+router.post('/proxy', async (req, res) => {
     const fatura = req.body;
     
     try {

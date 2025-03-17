@@ -365,6 +365,8 @@ function criarEstruturaImpostos() {
         issRetido: { aliquota: 0, valor: 0 },
         pis: { aliquota: 0, valor: 0 },
         cofins: { aliquota: 0, valor: 0 },
+        irpj: { aliquota: 0, valor: 0 },
+        csll: { aliquota: 0, valor: 0 },
         icms: { aliquota: 0, valor: 0 }
     };
 }
