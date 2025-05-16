@@ -9,12 +9,13 @@ var LancamentoContaPagarJsonClient = function () {
 	this._EndPoint = "https://app.omie.com.br/api/v1/financas/contapagar/";
 
 	this._Call = function (method, param) {
+		// console.log(JSON.stringify({ call: method, app_key: APP_KEY, app_secret: APP_SECRET, param: (param) ? param : [] }));
 		return new Promise((resolve, reject) => {
 			var server = new XMLHttpRequest();
 			
 			server.open("POST", this._EndPoint, true);
 			server.setRequestHeader("Content-Type", "application/json");
-
+			
 			var req = JSON.stringify({ call: method, app_key: APP_KEY, app_secret: APP_SECRET, param: (param) ? param : [] });
 			
 			server.onreadystatechange = function () {

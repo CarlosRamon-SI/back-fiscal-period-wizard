@@ -1,8 +1,8 @@
 const jsonModel = require('../models/jsonModel');
-const { exec } = require('child_process'); 
+const { exec } = require('child_process');
 const path = require('path');
 const he = require('he');
-const { getProjetos, getClientes } = require('../utils/Comuns');
+const { getProjetos, getClientes, getProjeto, getCliente, splitNotaSemProjeto } = require('../utils/Comuns');
 
 const { projetos, clientes } = require('../utils/base');
 
@@ -15,12 +15,12 @@ const consultaNFe = new NFeJsonClient();
 function dbackup() {
     const bat = path.resolve(__dirname, 'BackupMaker.bat');
     exec(`"${bat}"`, (error, stdout, stderr) => {
-        if(error) {
+        if (error) {
             console.error('Falha ao realizar backup: ', error.message);
             return;
         }
 
-        if(stderr) {
+        if (stderr) {
             console.error('Falha na execução do backup: ', stderr);
             return;
         }
@@ -33,7 +33,7 @@ async function getNFEs(firstRequest, dataInicio, dataFim) {
 
     // const exclusaoCfop = ["6.915"];
     const exclusaoCfop = [];
-    
+
     try {
         var notas = [];
         var nfeArray = [];
@@ -54,12 +54,12 @@ async function getNFEs(firstRequest, dataInicio, dataFim) {
             nfeArray = nfeArray.concat(paginacao.nfCadastro);
         }
 
-        for (let n = 0; n < nfeArray.length; n++) { 
+        for (let n = 0; n < nfeArray.length; n++) {
             const nfe = nfeArray[n];
 
             const serie = nfe.ide.mod * 10000
 
-            if(nfe.ide.nNF) {
+            if (nfe.ide.nNF) {
                 if (!exclusaoCfop.includes(nfe.det[0].prod.CFOP)) {
                     let nfeObj = {
                         DataEmissao: nfe.ide.dEmi,
@@ -76,7 +76,7 @@ async function getNFEs(firstRequest, dataInicio, dataFim) {
                 }
             }
         }
-        
+
         return notas;
     } catch (error) {
         console.error("Erro ao processar NFEs: ", error);
@@ -84,7 +84,7 @@ async function getNFEs(firstRequest, dataInicio, dataFim) {
 }
 
 async function getNFSEs(firstRequest, dataInicio, dataFim) {
-    
+
     try {
         var notas = [];
         var nfseArray = [];
@@ -170,14 +170,14 @@ async function getNFSEs(firstRequest, dataInicio, dataFim) {
 };
 
 function datas(mes, ano) {
-    const nomesMeses = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 
-                        'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+    const nomesMeses = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho',
+        'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
 
     const mesNumero = mes - 1;
     const primeiroDia = new Date(ano, mesNumero, 1);
     const ultimoDia = new Date(ano, mes, 0);
     const diaQuinze = new Date(ano, mes, 15)
-    
+
     const formatarData = (data) => {
         const dia = String(data.getDate()).padStart(2, '0');
         const mes = String(data.getMonth() + 1).padStart(2, '0'); // Janeiro é 0
@@ -186,7 +186,7 @@ function datas(mes, ano) {
     };
 
     const periodo = `${nomesMeses[mesNumero]}-${String(ano).slice(-2)}`;
-    
+
     return {
         periodo: periodo,
         dataInicio: formatarData(primeiroDia),
@@ -196,78 +196,183 @@ function datas(mes, ano) {
 }
 
 async function process(mes, ano, projetos, clientes) {
+    await dbackup();
+    const { periodo, dataInicio, dataFim, dataVencimento } = datas(mes, ano);
+
+    const firstRequestNFSe = {
+        nPagina: 1,
+        nRegPorPagina: 20,
+        dEmiInicial: dataInicio,
+        dEmiFinal: dataFim
+    };
+
+    const firstRequestNFe = {
+        pagina: 1,
+        registros_por_pagina: 20,
+        tpNF: 1,
+        dEmiInicial: dataInicio,
+        dEmiFinal: dataFim
+    };
+
+    const totais = {
+        bruto: 0,
+        servicos: 0,
+        comercio: 0,
+        canceladas: 0,
+        registros: 0
+    };
+
+    const result = {
+        impostos: criarEstruturaImpostos(),
+        comIss: [],
+        semIss: [],
+        revenda: [],
+        totalBruto: 0,
+        totalServicos: 0,
+        totalComercio: 0,
+        totalCanceladas: 0,
+        totalRegistros: 0,
+        dataVencimento: dataVencimento,
+        titulos: [],
+        periodo
+    };
+
+    /**
+     * TODO:    QUANDO NÃO LOCALIZAR CLIENTE OU PROJETO, REALIZAR CONSULTA DE CLIENTE NO PROCESSAMENTO
+     * TODO:    AGENDAR UM CHRONO PARA ATUALIZAR BASE DE CLIENTES E PROJETOS
+     */
+    const clientesMap = new Map(clientes.map(c => [c.codigo_cliente, c]));
+    const projetosMap = new Map(projetos.map(p => [p.codigo, p]));
+
     try {
-        await dbackup();
-        const { periodo, dataInicio, dataFim, dataVencimento } = datas(mes, ano);
-
-        const firstRequestNFSe = {
-            nPagina: 1,
-            nRegPorPagina: 20,
-            dEmiInicial: dataInicio,
-            dEmiFinal: dataFim
-        };
-
-        const firstRequestNFe = {
-            pagina: 1,
-            registros_por_pagina: 20,
-            tpNF: 1,
-            dEmiInicial: dataInicio,
-            dEmiFinal: dataFim
-        };
-        
-        const totais = {
-            bruto: 0,
-            servicos: 0,
-            comercio: 0,
-            canceladas: 0,
-            registros: 0
-        };
-        
-        const result = {
-            impostos: criarEstruturaImpostos(),
-            comIss: [],
-            semIss: [],
-            revenda: [],
-            totalBruto: 0,
-            totalServicos: 0,
-            totalComercio: 0,
-            totalCanceladas: 0,
-            totalRegistros: 0,
-            dataVencimento: dataVencimento,
-            titulos: [],
-            periodo
-        };
-
-        const clientesMap = new Map(clientes.map(c => [c.codigo_cliente, c]));
-        const projetosMap = new Map(projetos.map(p => [p.codigo, p]));
-        
         const notasServicos = await getNFSEs(firstRequestNFSe, dataInicio, dataFim);
         notasServicos.sort((a, b) => a.NumeroNFSe - b.NumeroNFSe);
 
-        for (const nota of notasServicos) {
-            await processarNotaServico(nota, clientesMap, projetosMap, result, totais);
-        }
-        
+        // for (const nota of notasServicos) {
+        //     await processarNotaServico(nota, clientesMap, projetosMap, result, totais, dataInicio, dataFim);
+        // }
+        await processarNotasServico(notasServicos, clientesMap, projetosMap, result, totais, ano);
+    } catch (error) {
+        console.error('Erro no processamento de NFS-e:', error);
+        throw error;
+    }
+
+    try {
         const notasProdutos = await getNFEs(firstRequestNFe, dataInicio, dataFim);
         notasProdutos.sort((a, b) => a.NumeroNFe - b.NumeroNFe);
 
         for (const nota of notasProdutos) {
             await processarNotaRevenda(nota, clientesMap, projetosMap, result, totais);
         }
-        
-        atualizarTotais(result, totais);
-        // console.log("🚀 ~ process ~ result:", JSON.stringify(result));
-        return await jsonModel.insertJson(periodo, JSON.stringify(result));
     } catch (error) {
-        console.error('Erro no processamento:', error);
+        console.error('Erro no processamento de NF-e:', error);
         throw error;
+    }
+
+    atualizarTotais(result, totais);
+    return await jsonModel.insertJson(periodo, JSON.stringify(result));
+}
+
+async function processarNotasServico(notasServicos, clientesMap, projetosMap, result, totais, ano) {
+    const pseudoNotas = [];
+
+    for (const nota of notasServicos) {
+        let projetoId = nota.CodigoProjeto;
+        if (!projetoId) {
+            const novasPseudoNotas = await splitNotaSemProjeto(ano, nota);
+            for (const pNotas of novasPseudoNotas) {
+                console.log(`${pNotas.NumeroNFSe}: ${pNotas.ValorNFSe}`);
+            }
+            const totalPseudoNotas = novasPseudoNotas.reduce((sum, n) => sum + decimalParaInteiro(n.ValorNFSe), 0);
+
+            console.log(`Nota ${nota.NumeroNFSe}: Valor original ${nota.ValorNFSe}, Total pseudo-notas ${totalPseudoNotas}`);
+            pseudoNotas.push(...novasPseudoNotas);
+
+            for (const pseudoNota of pseudoNotas) {
+                if (!projetosMap.has(pseudoNota.CodigoProjeto)) {
+                    const projeto = await getProjeto(pseudoNota.CodigoProjeto);
+                    projetosMap.set(pseudoNota.CodigoProjeto, projeto);
+                }
+            }
+            continue;
+        }
+
+        const projeto = projetosMap.has(nota.CodigoProjeto) ? projetosMap.get(nota.CodigoProjeto) : await getProjeto(nota.CodigoProjeto);
+        const cliente = clientesMap.has(nota.CodigoCliente) ? clientesMap.get(nota.CodigoCliente) : await getCliente(nota.CodigoCliente);
+
+        const dadosBase = {
+            ClienteRazaoSocial: cliente ? he.decode(cliente.razao_social) : '',
+            ClienteCnpjCpf: cliente?.cnpj_cpf || '',
+            ProjetoNome: projeto ? he.decode(projeto.nome) : ''
+        };
+
+        const dadosNota = {
+            NumeroNFSe: nota.NumeroNFSe,
+            DataEmissao: nota.DataEmissao,
+            DataCancelamento: nota.DataCancelamento || '',
+            ValorNFSe: Number(nota.ValorNFSe.toFixed(2)),
+            RetISS: nota.Servicos.IssRetido,
+            StatusNFSe: nota.StatusNFSe,
+            ...dadosBase,
+            issRetido: 0,
+            pis: 0,
+            cofins: 0,
+            ...(nota.Servicos.IssRetido !== 'S' ? { iss: 0 } : {})
+        };
+
+        for (const servico of nota.Servicos) {
+
+            const estruturaProjeto = {
+                projetoId,
+                ProjetoNome: dadosBase.ProjetoNome,
+                notas: [dadosNota]
+            };
+
+            if (servico.IssRetido === 'S') {
+                let projetoExistente = result.comIss.find(p => p.projetoId === projetoId);
+                if (!projetoExistente) {
+                    result.comIss.push(estruturaProjeto);
+                } else if (!projetoExistente.notas.some(n => n.NumeroNFSe === dadosNota.NumeroNFSe)) {
+                    projetoExistente.notas.push(dadosNota);
+                }
+            } else {
+                let projetoExistente = result.semIss.find(p => p.projetoId === projetoId);
+                if (!projetoExistente) {
+                    result.semIss.push(estruturaProjeto);
+                } else if (!projetoExistente.notas.some(n => n.NumeroNFSe === dadosNota.NumeroNFSe)) {
+                    projetoExistente.notas.push(dadosNota);
+                }
+                if (nota.StatusNFSe === 'Cancelada') {
+                    totais.canceladas += dadosNota.ValorNFSe;
+                }
+            }
+        }
+        totais.servicos += dadosNota.ValorNFSe;
+        totais.registros++;
+    }
+
+    console.log("🚀 ~ processarNotasServico ~ pseudoNotas.length:", pseudoNotas.length)
+    if (pseudoNotas.length > 0) {
+        await processarNotasServico(pseudoNotas, clientesMap, projetosMap, result, totais, ano)
     }
 }
 
-async function processarNotaServico(nota, clientesMap, projetosMap, result, totais) {
-    const cliente = clientesMap.get(nota.CodigoCliente);
-    const projeto = projetosMap.get(nota.CodigoProjeto);
-    const projetoId = nota.CodigoProjeto;
+async function processarNotaServico(nota, clientesMap, projetosMap, result, totais, dataInicio, dataFim) {
+
+    let projetoId = nota.CodigoProjeto;
+    if (!projetoId) {
+        const pseudoNotas = await splitNotaSemProjeto(dataInicio, dataFim, nota);
+
+        for (const pseudoNota of pseudoNotas) {
+            if (!projetosMap.has(pseudoNota.CodigoProjeto)) {
+                const projeto = await getProjeto(pseudoNota.CodigoProjeto);
+                projetosMap.set(pseudoNota.CodigoProjeto, projeto);
+            }
+        }
+    }
+
+    const projeto = projetosMap.has(nota.CodigoProjeto) ? projetosMap.get(nota.CodigoProjeto) : await getProjeto(nota.CodigoProjeto);
+    const cliente = clientesMap.has(nota.CodigoCliente) ? clientesMap.get(nota.CodigoCliente) : await getCliente(nota.CodigoCliente);
 
     const dadosBase = {
         ClienteRazaoSocial: cliente ? he.decode(cliente.razao_social) : '',
@@ -315,15 +420,15 @@ async function processarNotaServico(nota, clientesMap, projetosMap, result, tota
                 totais.canceladas += dadosNota.ValorNFSe;
             }
         }
-
     }
     totais.servicos += dadosNota.ValorNFSe;
     totais.registros++;
 }
 
 async function processarNotaRevenda(nota, clientesMap, projetosMap, result, totais) {
-    const cliente = clientesMap.get(nota.CodigoCliente);
-    const projeto = projetosMap.get(nota.CodigoProjeto);
+    const cliente = clientesMap.has(nota.CodigoCliente) ? clientesMap.get(nota.CodigoCliente) : await getCliente(nota.CodigoCliente);
+    const projeto = projetosMap.has(nota.CodigoProjeto) ? projetosMap.get(nota.CodigoProjeto) : await getProjeto(nota.CodigoProjeto);
+    // TODO: ATUALIZAR CACHE DE CLIENTES E PROJETOS SEMPRE QUE OCORRER UM NOVO CLIENTE/PROJETO.
     const projetoId = nota.CodigoProjeto;
 
     const dadosNota = {
@@ -373,7 +478,7 @@ function criarEstruturaImpostos() {
 
 function atualizarTotais(result, totais) {
     totais.bruto = totais.servicos + totais.comercio;
-    
+
     Object.assign(result, {
         totalBruto: Number(totais.bruto.toFixed(2)),
         totalServicos: Number(totais.servicos.toFixed(2)),
@@ -383,14 +488,26 @@ function atualizarTotais(result, totais) {
     });
 }
 
-async function service (mes, ano) {
+async function service(mes, ano) {
 
-    const todosProjetos = projetos || await getProjetos();
-    const todosClientes =  clientes || await getClientes();
-    
-    if( todosProjetos.length > 0 && todosClientes.length > 0) {
+    const todosProjetos = projetos;
+    const todosClientes = clientes;
+
+    if (todosProjetos.length > 0 && todosClientes.length > 0) {
         return process(mes, ano, todosProjetos, todosClientes)
     }
+}
+
+function decimalParaInteiro(valor) {
+    const partes = valor.toString().split('.');
+
+    if (partes.length === 1) {
+        return parseInt(partes[0] + '00');
+    }
+
+    const parteInteira = partes[0];
+    const parteDecimal = partes[1].padEnd(2, '0').slice(0, 2);
+    return parseInt(parteInteira + parteDecimal);
 }
 
 module.exports = {

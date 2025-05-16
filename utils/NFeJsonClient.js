@@ -22,7 +22,6 @@ var NFConsultarJsonClient = function () {
 				
 				if(server.status != 200) {
 					reject(`AJAX error ${server.status}: ${server.statusText}`);
-					// reject(new Error(`AJAX error ${server.status}: ${server.statusText}`))
 				} else {
 					resolve(JSON.parse(server.responseText));
 				}

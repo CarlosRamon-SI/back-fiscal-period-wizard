@@ -11,7 +11,6 @@ router.post('/proxy', async (req, res) => {
     try {
         const response = await registraConta.IncluirContaPagarPorLote(fatura);
         res.json(response.data);
-        
     } catch (err) {
         res.status(500).send(err.message);
     }

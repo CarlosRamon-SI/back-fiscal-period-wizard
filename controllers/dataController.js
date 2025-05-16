@@ -38,6 +38,7 @@ exports.insertData = async (req, res) => {
 };
 
 exports.updateData = async (req, res) => {
+    console.log(req.body);
     const {id, data} = req.body;
     try {
         const result = await jsonModel.updateJson(id, JSON.stringify(data));
