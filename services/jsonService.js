@@ -30,8 +30,7 @@ function dbackup() {
 }
 
 async function getNFEs(firstRequest, dataInicio, dataFim) {
-
-    // const exclusaoCfop = ["6.915"];
+    
     const exclusaoCfop = [];
 
     try {
@@ -39,7 +38,7 @@ async function getNFEs(firstRequest, dataInicio, dataFim) {
         var nfeArray = [];
         const response = await consultaNFe.ListarNF(firstRequest);
         const totalPaginas = response.total_de_paginas;
-        nfeArray = nfeArray.concat(response.nfCadastro);
+        nfeArray.push(...response.nfCadastro);
 
         for (let pagina = 2; pagina <= totalPaginas; pagina++) {
             let newPage = {
@@ -54,10 +53,11 @@ async function getNFEs(firstRequest, dataInicio, dataFim) {
             nfeArray = nfeArray.concat(paginacao.nfCadastro);
         }
 
-        for (let n = 0; n < nfeArray.length; n++) {
-            const nfe = nfeArray[n];
+        for(const nfe of nfeArray) {
 
-            const serie = nfe.ide.mod * 10000
+        // }
+        // for (let n = 0; n < nfeArray.length; n++) {
+        //     const nfe = nfeArray[n];
 
             if (nfe.ide.nNF) {
                 if (!exclusaoCfop.includes(nfe.det[0].prod.CFOP)) {
@@ -79,7 +79,8 @@ async function getNFEs(firstRequest, dataInicio, dataFim) {
 
         return notas;
     } catch (error) {
-        console.error("Erro ao processar NFEs: ", error);
+        console.error("Falha ao tentar obter NFEs: ", error);
+        return null;
     }
 }
 
@@ -165,7 +166,8 @@ async function getNFSEs(firstRequest, dataInicio, dataFim) {
 
         return notas;
     } catch (error) {
-        console.error("Erro ao processar NFSEs: ", error);
+        console.error("Falha ao tentar obter NFSEs: ", error);
+        return null;
     }
 };
 
@@ -195,7 +197,7 @@ function datas(mes, ano) {
     };
 }
 
-async function process(mes, ano, projetos, clientes) {
+async function process(mes, ano) {
     await dbackup();
     const { periodo, dataInicio, dataFim, dataVencimento } = datas(mes, ano);
 
@@ -237,33 +239,37 @@ async function process(mes, ano, projetos, clientes) {
         periodo
     };
 
-    /**
-     * TODO:    QUANDO NÃO LOCALIZAR CLIENTE OU PROJETO, REALIZAR CONSULTA DE CLIENTE NO PROCESSAMENTO
-     * TODO:    AGENDAR UM CHRONO PARA ATUALIZAR BASE DE CLIENTES E PROJETOS
-     */
+    // TODO:    QUANDO NÃO LOCALIZAR CLIENTE OU PROJETO, REALIZAR CONSULTA DE CLIENTE NO PROCESSAMENTO
+    // TODO:    AGENDAR UM CHRONO PARA ATUALIZAR BASE DE CLIENTES E PROJETOS
+    
     const clientesMap = new Map(clientes.map(c => [c.codigo_cliente, c]));
     const projetosMap = new Map(projetos.map(p => [p.codigo, p]));
 
-    try {
-        const notasServicos = await getNFSEs(firstRequestNFSe, dataInicio, dataFim);
-        notasServicos.sort((a, b) => a.NumeroNFSe - b.NumeroNFSe);
+    const notasServicos = await getNFSEs(firstRequestNFSe, dataInicio, dataFim);
 
-        // for (const nota of notasServicos) {
-        //     await processarNotaServico(nota, clientesMap, projetosMap, result, totais, dataInicio, dataFim);
-        // }
+    if(!notasServicos) {
+        throw new Error(`Nenhuma nota de serviço retornada.`)
+    }
+    notasServicos.sort((a, b) => a.NumeroNFSe - b.NumeroNFSe);
+
+    try {   
         await processarNotasServico(notasServicos, clientesMap, projetosMap, result, totais, ano);
     } catch (error) {
         console.error('Erro no processamento de NFS-e:', error);
         throw error;
     }
 
-    try {
-        const notasProdutos = await getNFEs(firstRequestNFe, dataInicio, dataFim);
-        notasProdutos.sort((a, b) => a.NumeroNFe - b.NumeroNFe);
+    const notasProdutos = await getNFEs(firstRequestNFe, dataInicio, dataFim);
+    if(!notasProdutos) {
+        throw new Error(`Nenhuma nota de produto retornada.`);
+    }
+    notasProdutos.sort((a, b) => a.NumeroNFe - b.NumeroNFe);
 
-        for (const nota of notasProdutos) {
-            await processarNotaRevenda(nota, clientesMap, projetosMap, result, totais);
-        }
+    try {
+        // for (const nota of notasProdutos) {
+        //     await processarNotaRevenda(nota, clientesMap, projetosMap, result, totais);
+        // }
+        await processarNotasRevenda(notasProdutos, clientesMap, projetosMap, result, totais);
     } catch (error) {
         console.error('Erro no processamento de NF-e:', error);
         throw error;
@@ -275,19 +281,22 @@ async function process(mes, ano, projetos, clientes) {
 
 async function processarNotasServico(notasServicos, clientesMap, projetosMap, result, totais, ano) {
     const pseudoNotas = [];
-
+    
     for (const nota of notasServicos) {
+        
+        console.log(`Iniciando processamento da nota: ${nota.NumeroNFSe}`)
         let projetoId = nota.CodigoProjeto;
         if (!projetoId) {
+            console.log(`Nota sem projeto.`)
             const novasPseudoNotas = await splitNotaSemProjeto(ano, nota);
             for (const pNotas of novasPseudoNotas) {
-                console.log(`${pNotas.NumeroNFSe}: ${pNotas.ValorNFSe}`);
+                console.log(`${pNotas.NumeroNFSe}: ${pNotas.ValorNFSe} (${pNotas.CodigoProjeto || 'sem projeto'})`);
             }
             const totalPseudoNotas = novasPseudoNotas.reduce((sum, n) => sum + decimalParaInteiro(n.ValorNFSe), 0);
-
+            
             console.log(`Nota ${nota.NumeroNFSe}: Valor original ${nota.ValorNFSe}, Total pseudo-notas ${totalPseudoNotas}`);
             pseudoNotas.push(...novasPseudoNotas);
-
+            
             for (const pseudoNota of pseudoNotas) {
                 if (!projetosMap.has(pseudoNota.CodigoProjeto)) {
                     const projeto = await getProjeto(pseudoNota.CodigoProjeto);
@@ -349,10 +358,11 @@ async function processarNotasServico(notasServicos, clientesMap, projetosMap, re
         }
         totais.servicos += dadosNota.ValorNFSe;
         totais.registros++;
+        console.log(`Processo da nota ${nota.NumeroNFSe} concluido`)
     }
-
-    console.log("🚀 ~ processarNotasServico ~ pseudoNotas.length:", pseudoNotas.length)
+    
     if (pseudoNotas.length > 0) {
+        console.log(`Iniciando processamento das pseudoNotas, que totalizam ${pseudoNotas.length} notas.`)
         await processarNotasServico(pseudoNotas, clientesMap, projetosMap, result, totais, ano)
     }
 }
@@ -425,7 +435,59 @@ async function processarNotaServico(nota, clientesMap, projetosMap, result, tota
     totais.registros++;
 }
 
+async function processarNotasRevenda(notasProdutos, clientesMap, projetosMap, result, totais) {
+
+    for(const nota of notasProdutos) {
+        console.log(`Iniciando processamento da nota de Revenda ${nota.NumeroNFe}`)
+
+        const cliente = clientesMap.has(nota.CodigoCliente) ? clientesMap.get(nota.CodigoCliente) : await getCliente(nota.CodigoCliente);
+
+        let projeto;
+        if(!nota.DataCancelamento && nota.CodigoProjeto) {
+            projeto = projetosMap.has(nota.CodigoProjeto) ? projetosMap.get(nota.CodigoProjeto) : await getProjeto(nota.CodigoProjeto);
+        }
+
+        // TODO: ATUALIZAR CACHE DE CLIENTES E PROJETOS SEMPRE QUE OCORRER UM NOVO CLIENTE/PROJETO.
+
+        const projetoId = nota.CodigoProjeto;
+        
+        const dadosNota = {
+            NumeroNFSe: nota.NumeroNFe,
+            DataEmissao: nota.DataEmissao,
+            DataCancelamento: nota.DataCancelamento || '',
+            ValorNFSe: Number(nota.ValorTotalProdutos.toFixed(2)),
+            RetISS: 'N',
+            StatusNFSe: nota.DataCancelamento ? 'Cancelada' : 'Exigível',
+            ClienteRazaoSocial: cliente ? he.decode(cliente.razao_social) : '',
+            ClienteCnpjCpf: cliente?.cnpj_cpf || '',
+            ProjetoNome: projeto ? he.decode(projeto.nome) : '',
+            icms: 0
+        };
+        
+        const estruturaProjeto = {
+            projetoId,
+            ProjetoNome: dadosNota.ProjetoNome,
+            notas: [dadosNota]
+        };
+        
+        const projetoExistente = result.revenda.find(p => p.projetoId === projetoId);
+
+        if (!projetoExistente) {
+            result.revenda.push(estruturaProjeto);
+        } else if (!projetoExistente.notas.some(n => n.NumeroNFSe === dadosNota.NumeroNFSe)) {
+            projetoExistente.notas.push(dadosNota);
+        }
+        
+        totais.comercio += dadosNota.ValorNFSe;
+        totais.registros++;
+        if (nota.DataCancelamento) {
+            totais.canceladas += dadosNota.ValorNFSe;
+        }
+    }
+}
+
 async function processarNotaRevenda(nota, clientesMap, projetosMap, result, totais) {
+    console.log(`Iniciando processamento da nota de Revenda ${nota.NumeroNFe}`)
     const cliente = clientesMap.has(nota.CodigoCliente) ? clientesMap.get(nota.CodigoCliente) : await getCliente(nota.CodigoCliente);
     const projeto = projetosMap.has(nota.CodigoProjeto) ? projetosMap.get(nota.CodigoProjeto) : await getProjeto(nota.CodigoProjeto);
     // TODO: ATUALIZAR CACHE DE CLIENTES E PROJETOS SEMPRE QUE OCORRER UM NOVO CLIENTE/PROJETO.
@@ -489,12 +551,8 @@ function atualizarTotais(result, totais) {
 }
 
 async function service(mes, ano) {
-
-    const todosProjetos = projetos;
-    const todosClientes = clientes;
-
-    if (todosProjetos.length > 0 && todosClientes.length > 0) {
-        return process(mes, ano, todosProjetos, todosClientes)
+    if (projetos.length > 0 && clientes.length > 0) {
+        return process(mes, ano)
     }
 }
 

@@ -35,8 +35,7 @@ async function getProjetos() {
 };
 
 async function getProjeto(projetoId) {
-    // console.log("🚀 ~ getProjeto ~ projetoId:", projetoId)
-    console.log('obtendo detalhes de Projeto');
+    console.log(`Obtendo detalhes do Projeto ID: ${projetoId}`);
     const projeto = new ProjetosCadastroJsonClient();
 
     try {
@@ -44,7 +43,7 @@ async function getProjeto(projetoId) {
             codigo: projetoId
         };
         const response = await projeto.ConsultarProjeto(filtro);
-
+        
         return response;
     } catch (error) {
         throw new Error(`Erro ao obter Projeto ${error.message}`);
@@ -85,7 +84,7 @@ async function getClientes() {
 
 async function getCliente(clientId) {
 
-    console.log('Obtendo detalhes do cliente');
+    console.log(`Obtendo detalhes do cliente ID: ${clientId}`);
     const cliente = new ClientesCadastroJsonClient();
 
     try {
@@ -102,7 +101,6 @@ async function getCliente(clientId) {
 };
 
 async function splitNotaSemProjeto(ano, nota) {
-    console.log("🚀 ~ splitNotaSemProjeto ~ nota.CodigoCliente:", nota.CodigoCliente)
     var todasContas = [];
 
     console.log(`Obtendo contas a receber relacionadas à ${nota.NumeroNFSe}`);
