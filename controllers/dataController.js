@@ -1,6 +1,7 @@
 const jsonModel = require('../models/jsonModel');
 const { msg, state } = require('../utils/messages');
 const { service } = require('../services/jsonService');
+const util = require('util');
 
 exports.insertData = async (req, res) => {
     const { mes, ano } = req.body;
@@ -67,6 +68,7 @@ exports.updateData = async (req, res) => {
 exports.getData = async (req, res) => {
     try {
         const result = await jsonModel.getJson(req.params.id);
+        console.log("🚀 ~ exports.getData= ~ data:", JSON.parse(result[0].data))
         
         if(result.length > 0) {
             return res.status(200).json({

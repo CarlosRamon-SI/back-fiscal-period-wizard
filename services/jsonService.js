@@ -46,7 +46,8 @@ async function getNFEs(firstRequest, dataInicio, dataFim) {
                 registros_por_pagina: 20,
                 tpNF: 1,
                 dEmiInicial: dataInicio,
-                dEmiFinal: dataFim
+                dEmiFinal: dataFim,
+                opPedido: '11'
             }
 
             let paginacao = await consultaNFe.ListarNF(newPage);
