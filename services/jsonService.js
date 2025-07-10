@@ -214,7 +214,8 @@ async function process(mes, ano) {
         registros_por_pagina: 20,
         tpNF: 1,
         dEmiInicial: dataInicio,
-        dEmiFinal: dataFim
+        dEmiFinal: dataFim,
+        opPedido: '11'
     };
 
     const totais = {
